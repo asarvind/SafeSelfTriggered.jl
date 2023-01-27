@@ -1,7 +1,8 @@
 module SafeSelfTriggered
 #------------------------------------------------------------------------------------------------------------
 
-export SolverOptions, SelfTriggeredLinearControl,  OfflineQuantities
+export SolverOptions, SelfTriggeredLinearControl,  OfflineQuantities, trigger_time_upper_bound
+export verify, compare_computation_times
 
 using LinearAlgebra, LazySets # linear algebra and set based calculations
 using JuMP, SCS, MathOptInterface, Mosek, MosekTools # optimization packages
@@ -349,7 +350,8 @@ end
 @doc raw"""
 
 """
-function compare_computation_times(number_points::Integer, L::SelfTriggeredLinearImpulsive{<:Real}, T::Matrix{<:Real}, Q::OfflineQuantities; sampling_region_scale::Real = 1.0, seed = 1)
+function compare_computation_times(number_points::Integer, Lc::SelfTriggeredLinearControl{<:Real}, T::Matrix{<:Real}, Q::OfflineQuantities; sampling_region_scale::Real = 1.0, seed = 1)
+    L = convert(SelfTriggeredLinearImpulsive, Lc)
     stateaction = exp(L.A*L.tmin) # state action matrix used in discrete time reachability
     Zinp = bloat_input(L, L.tmin) # input zonotope in discrete time reachability
     inputgens = Zinp.generators # generators of above input zonotope

@@ -2,5 +2,5 @@ using SafeSelfTriggered
 using Test
 
 @testset "SafeSelfTriggered.jl" begin
-    # Write your tests here.
+    include("underwater.jl")
 end
