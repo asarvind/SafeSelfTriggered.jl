@@ -1,0 +1,3 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+SafeSelfTriggered = "0dfbb1cc-3cf0-4b16-94c4-4aaa3b5f0978"
