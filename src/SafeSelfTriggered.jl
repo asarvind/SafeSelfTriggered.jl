@@ -232,7 +232,7 @@ function large_invariant_zero_centered(L::SelfTriggeredLinearImpulsive{<:Real}, 
         end
         iter += 1
         newoptions.upper_bound_expansion_rate = currate
-        println("iteration = ", iter, " status = ", status, " search_gap = ", prec)
+        print("\r iteration = ", iter, " status = ", status, " search_gap = ", prec, "\e[2K")
     end
     newoptions = deepcopy(options)
     newoptions.upper_bound_expansion_rate = uprate # new options with minimized expansion rate
@@ -262,7 +262,7 @@ function error_scale_sequence(L::SelfTriggeredLinearImpulsive{N}, Zinv::ComplexZ
         Zred = reduce_order(Zinp, options.error_zonotope_order) # reduce order of zonotope representing disturbance input
         Zcompinp = ComplexZonotope(Zred.center, Zred.generators, ones(size(Zred.generators,2))) # convert input zonotope to complex zonotope
         beta = inclusion_scale(Zinv, Zcompinp) # minimum contraction of invariant zonotope required for containment of input zonotope
-        println("error scaling iteration =", i, " remaining = ", options.number_steps - i)
+        print("\r error scaling iteration =", i, " remaining = ", options.number_steps - i, "\e[2K")
         if i == 1
             push!(out, beta)
         else
@@ -285,7 +285,7 @@ function state_scale_sequence(L::SelfTriggeredLinearImpulsive{N}, Zinv::ComplexZ
     for i = 1:options.number_steps
         mat = exp(L.A*(i-1)*options.time_step)
         alpha = inclusion_scale(Zinv, mat*M1*Zinv, optimizer = optimizer) + alphaerr
-        println("state action scaling iteration =", i, " remaining = ", options.number_steps - i)
+        print("\r state action scaling iteration =", i, " remaining = ", options.number_steps - i, "\e[2K")
         if i == 1
             push!(out, alpha)
         else
