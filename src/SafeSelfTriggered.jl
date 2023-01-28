@@ -9,8 +9,17 @@ using JuMP, SCS, MathOptInterface, Mosek, MosekTools # optimization packages
 using Random # random number generation
 include("ComplexZonotope.jl") # calculations with complex zonotope
 
-@doc raw"""
 
+@doc raw"""
+    struct SelfTriggeredLinearControl{N<:Real}
+        A::Matrix{N} # state action matrix
+        B::Matrix{N} # control action matrix 
+        E::Matrix{N} # disturbance action matrix 
+        K::Matrix{N} # feedback gain matrix 
+        tmin::N # minimum time elapsed before trigger
+    end
+
+Specification of Self Triggered Linear Control System
 """
 struct SelfTriggeredLinearControl{N<:Real}
     A::Matrix{N} # state action matrix
@@ -99,12 +108,34 @@ function OfflineComputationOptions(L::SelfTriggeredLinearImpulsive{<:Real})
     return OfflineComputationOptions(upper_bound_expansion_rate, samples_time_gap, number_samples, time_step, number_steps, error_zonotope_order, minimum_expansion_rate_search_gap, maximum_iterations, expansion_index)
 end
 
+@doc raw"""
+    mutable struct SolverOptions
+        sequence_length::Real
+        order_invariant_zonotope::Integer
+        order_error_zonotope::Integer
+        optimizer::Function
+        function SolverOptions(; sequence_length::Integer=100, order_invariant_zonotope::Integer=2, order_error_zonotope::Integer=10, optimizer::Function=Mosek.Optimizer)
+            return new(sequence_length, order_invariant_zonotope, order_error_zonotope, optimizer)
+        end
+    end
+
+contains options for computing offline the scalarized reachability sequences
+
+# inner constructor 
+    SolverOptions(; sequence_length::Integer=100, order_invariant_zonotope::Integer=2, order_error_zonotope::Integer=10, optimizer::Function=Mosek.Optimizer)
+
+# fields
+- sequence\_length : length of reachability sequences, default = 100
+- order\_invariant_zonotope : order of the invariant zonotope, default = 2
+- order\_error_zonotope : order of error zonotope used during computation, default = 10
+- optimizer : Optimization solver used, default : Mosek.optimizer
+"""
 mutable struct SolverOptions
     sequence_length::Real
     order_invariant_zonotope::Integer
     order_error_zonotope::Integer
     optimizer::Function
-    function SolverOptions(; sequence_length::Integer=100, order_invariant_zonotope::Integer=3, order_error_zonotope::Integer=10, optimizer::Function=Mosek.Optimizer)
+    function SolverOptions(; sequence_length::Integer=100, order_invariant_zonotope::Integer=2, order_error_zonotope::Integer=10, optimizer::Function=Mosek.Optimizer)
         return new(sequence_length, order_invariant_zonotope, order_error_zonotope, optimizer)
     end
 end
@@ -264,6 +295,24 @@ function state_scale_sequence(L::SelfTriggeredLinearImpulsive{N}, Zinv::ComplexZ
     return out
 end
 
+@doc raw"""
+    struct OfflineQuantities
+        time_step ::Real
+        invariant ::ComplexZonotope{<:Real, <:Number}
+        scaling_matrix ::Matrix{<:Number}
+        state_scales ::Vector{<:Real}
+        error_scales ::Vector{<:Real}        
+    end
+
+Quantities required to be computed offline.
+
+# fields
+- time_step : time step for computing successive reachable sets \
+- invariant : invariant complex zonotope used as template for encoding reachable sets
+- scaling_matrix : matrix which maps a point to the maximum scale inside the complex zonotope
+- state_scales : sequence of reachable sets encoded by scalars, obtained by successive action of state action matrix  
+- error_scales : sequence of disturbance reachable sets encoded by scalars
+"""
 struct OfflineQuantities
     time_step::Real
     invariant::ComplexZonotope{<:Real, <:Number}
@@ -287,6 +336,7 @@ end
 
 @doc raw"""
     OfflineQuantities(L::SelfTriggeredLinearControl{N}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}, solver_options::SolverOptions=SolverOptions()) where {N<:Real, M<:Number} -> ::OfflineQuantitites
+
 offline pre-computation of quantities required for computing latter the online triggering time upper bound.
 """
 function OfflineQuantities(Lc::SelfTriggeredLinearControl{N}, T::Matrix{N}, init_bound::Vector{N}=zeros(size(Lc.A,1)); solver_options::SolverOptions=SolverOptions()) where {N<:Real}
