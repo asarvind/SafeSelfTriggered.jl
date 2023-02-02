@@ -1,17 +1,18 @@
 module SafeSelfTriggered
 #------------------------------------------------------------------------------------------------------------
 
-export SolverOptions, LinearControlSystem,  OfflineQuantities, trigger_time_upper_bound
-export verify, compare_computation_times
+export SolverOptions, SampledLinearSystem,  OfflineQuantities, trigger_time_upper_bound
+export generate_schedule, generate_verifier, compare_computation_times, plot_scheduling_function
 
 using LinearAlgebra, LazySets # linear algebra and set based calculations
 using JuMP, SCS, MathOptInterface, Mosek, MosekTools # optimization packages
 using Random # random number generation
+using Plots # for plotting
 include("ComplexZonotope.jl") # calculations with complex zonotope
 
 
 @doc raw"""
-    struct LinearControlSystem{N<:Real}
+    struct SampledLinearSystem{N<:Real}
         A::Matrix{N} # state action matrix
         B::Matrix{N} # control action matrix 
         E::Matrix{N} # disturbance action matrix 
@@ -21,7 +22,7 @@ include("ComplexZonotope.jl") # calculations with complex zonotope
 
 Specification of Self Triggered Linear Control System
 """
-struct LinearControlSystem{N<:Real}
+struct SampledLinearSystem{N<:Real}
     A::Matrix{N} # state action matrix
     B::Matrix{N} # control action matrix 
     E::Matrix{N} # disturbance action matrix 
@@ -52,7 +53,7 @@ struct LinearImpulsiveSystem{N<:Real}
     tmin::N
 end
 
-function convert(::Type{LinearImpulsiveSystem{<:Real}}, L::LinearControlSystem{<:Real})
+function convert(::Type{LinearImpulsiveSystem{<:Real}}, L::SampledLinearSystem{<:Real})
     n, m = size(L.B)
     l = size(L.E, 2)
     Ai = [L.A L.B; zeros(m, n) zeros(m, m)]
@@ -232,7 +233,7 @@ function large_invariant_zero_centered(L::LinearImpulsiveSystem{<:Real}, Zinit::
         end
         iter += 1
         newoptions.upper_bound_expansion_rate = currate
-        print("\r iteration = ", iter, " status = ", status, " search_gap = ", prec, "\e[2K")
+        #print("\r iteration = ", iter, " status = ", status, " search_gap = ", prec, "\e[2K")
     end
     newoptions = deepcopy(options)
     newoptions.upper_bound_expansion_rate = uprate # new options with minimized expansion rate
@@ -241,7 +242,7 @@ function large_invariant_zero_centered(L::LinearImpulsiveSystem{<:Real}, Zinit::
     # scale up the minimized invariant to compute a large invariant
     if status ==  OPTIMAL
         lambda = 1/maximum(abs.(T*Zinv.generators)*Zinv.scale_vector)
-        println("invariant is scaled up ", lambda, " times")
+        #println("invariant is scaled up ", lambda, " times")
         return ComplexZonotope(Zinv.center, Zinv.generators, Zinv.scale_vector*lambda)
     else
         error("could not find invariant complex zonotope")
@@ -262,7 +263,7 @@ function error_scale_sequence(L::LinearImpulsiveSystem{N}, Zinv::ComplexZonotope
         Zred = reduce_order(Zinp, options.error_zonotope_order) # reduce order of zonotope representing disturbance input
         Zcompinp = ComplexZonotope(Zred.center, Zred.generators, ones(size(Zred.generators,2))) # convert input zonotope to complex zonotope
         beta = inclusion_scale(Zinv, Zcompinp) # minimum contraction of invariant zonotope required for containment of input zonotope
-        print("\r error scaling iteration =", i, " remaining = ", options.number_steps - i, "\e[2K")
+        #print("\r error scaling iteration =", i, " remaining = ", options.number_steps - i, "\e[2K")
         if i == 1
             push!(out, beta)
         else
@@ -285,7 +286,7 @@ function state_scale_sequence(L::LinearImpulsiveSystem{N}, Zinv::ComplexZonotope
     for i = 1:options.number_steps
         mat = exp(L.A*(i-1)*options.time_step)
         alpha = inclusion_scale(Zinv, mat*M1*Zinv, optimizer = optimizer) + alphaerr
-        print("\r state action scaling iteration =", i, " remaining = ", options.number_steps - i, "\e[2K")
+        #print("\r state action scaling iteration =", i, " remaining = ", options.number_steps - i, "\e[2K")
         if i == 1
             push!(out, alpha)
         else
@@ -335,11 +336,11 @@ function OfflineQuantities(L::LinearImpulsiveSystem{N}, Zinit::ComplexZonotope{N
 end
 
 @doc raw"""
-    OfflineQuantities(L::LinearControlSystem{N}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}, solver_options::SolverOptions=SolverOptions()) where {N<:Real, M<:Number} -> ::OfflineQuantitites
+    OfflineQuantities(L::SampledLinearSystem{N}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}, solver_options::SolverOptions=SolverOptions()) where {N<:Real, M<:Number} -> ::OfflineQuantitites
 
 offline pre-computation of quantities required for computing latter the online triggering time upper bound.
 """
-function OfflineQuantities(Lc::LinearControlSystem{N}, T::Matrix{N}, init_bound::Vector{N}=zeros(size(Lc.A,1)); solver_options::SolverOptions=SolverOptions()) where {N<:Real}
+function OfflineQuantities(Lc::SampledLinearSystem{N}, T::Matrix{N}, init_bound::Vector{N}=zeros(size(Lc.A,1)); solver_options::SolverOptions=SolverOptions()) where {N<:Real}
     L = convert(LinearImpulsiveSystem, Lc)
     Gentop = diagm(init_bound)
     Genbot = Lc.K*Gentop
@@ -373,6 +374,11 @@ function trigger_time_upper_bound(L::LinearImpulsiveSystem{<:Real}, x::Vector{<:
     return lowind*Q.time_step + L.tmin
 end
 
+function generate_schedule(L::SampledLinearSystem, Q::OfflineQuantities)
+    Limp = convert(LinearImpulsiveSystem, L)
+    scheduling_fun(x::Vector{<:Real}, u::Vector{<:Real}) = trigger_time_upper_bound(Limp, vcat(x,u), Q)
+end
+
 @doc raw"""
 
 """
@@ -397,46 +403,82 @@ function verify(x::Vector{N}, stateaction::Matrix{N}, inputgens::Matrix{N}, num_
     return out
 end
 
+function generate_verifier(L::SampledLinearSystem, T::Matrix{<:Real}, time_step::Real)
+    Limp = convert(LinearImpulsiveSystem, L)
+    dis_state_action = exp(Limp.A*L.tmin)
+    Zinp = bloat_input(Limp, Limp.tmin)
+    inputgens = Zinp.generators
+    out(x::Vector{<:Real}, u::Vector{<:Real}, t::Real) = verify(vcat(x,u), dis_state_action, inputgens, Int(floor(t/time_step)), T)
+    return out
+end
+
 @doc raw"""
 
 """
-function compare_computation_times(number_points::Integer, Lc::LinearControlSystem{<:Real}, T::Matrix{<:Real}, Q::OfflineQuantities; sampling_region_scale::Real = 1.0, seed = 1)
+function compare_computation_times(number_points::Integer, Lc::SampledLinearSystem{<:Real}, T::Matrix{<:Real}, Q::OfflineQuantities; sampling_region_scale::Real = 1.0, seed = 1)
     L = convert(LinearImpulsiveSystem, Lc)
     stateaction = exp(L.A*L.tmin) # state action matrix used in discrete time reachability
     Zinp = bloat_input(L, L.tmin) # input zonotope in discrete time reachability
     inputgens = Zinp.generators # generators of above input zonotope
     # generate random points inside Zinv
-    randpoints = []
+    randpairs = []
     for i = 1:number_points
-        randpoints = push!(randpoints, sampling_region_scale*real.(Q.invariant.generators*(rand(MersenneTwister(seed), Complex{Float64}, size(Q.invariant.scale_vector)) .*Q.invariant.scale_vector)))
+        rp =  sampling_region_scale*rand()*real.(Q.invariant.generators*(rand(MersenneTwister(seed), Complex{Float64}, size(Q.invariant.scale_vector)) .*Q.invariant.scale_vector))
+        rs = rp[1:size(Lc.A,1)]
+        if typeof(rs)<:Real
+            rs = [rs]
+        end
+        rc = rp[size(Lc.A,1)+1, end]
+        if typeof(rc)<:Real 
+            rc = [rc]
+        end
+        push!(randpairs, (rs, rc))
     end
     # compute schedules and number of multiples of minimum impulse time with precomputed reachability scales 
     schedules = []
-    number_steps = []
-    for x in randpoints
-        t = trigger_time_upper_bound(L, x, Q)
+    # create scheduling and verifying function 
+    sch_fun = generate_schedule(Lc, Q)
+    ver_fun = generate_verifier(Lc, T, Q.time_step)
+    for (x,u) in randpairs
+        t = sch_fun(x, u)
         push!(schedules, t)
-        push!(number_steps, Int(floor(t/L.tmin)))
-    end
-     # compute time required for computing schedules for all points by two approaches
-    comp_time0 = @elapsed begin
-        for x in randpoints
-            trigger_time_upper_bound(L, x, Q)
-        end
     end
     # compute time required for computing schedules for all points by two approaches
     comp_time1 = @elapsed begin
-        for x in randpoints
-            trigger_time_upper_bound(L, x, Q)
+        for (x,u) in randpairs
+            sch_fun(x, u)
         end
     end
     comp_time2 = @elapsed begin
         for i in 1:number_points
-            verify(randpoints[i], stateaction, inputgens, number_steps[i],
-                 T)
+            (x,u) = randpairs[i]
+            res = ver_fun(x, u, schedules[i])
+            if !res
+                error("Schecule not verified")
+            end
         end
     end
-    return (schedules, number_steps, min(comp_time0, comp_time1), comp_time2)
+    return (schedules, comp_time1, comp_time2)
+end
+
+function plot_scheduling_function(Q::OfflineQuantities; title::String = "", linewidth::Real = 10.0)
+    n = length(Q.error_scales)
+    xdata = AbstractFloat[]
+    ydata = AbstractFloat[]
+    for i = 1:n
+        scale = (1-Q.error_scales[i])/Q.state_scales[i]
+        if scale > 0
+            push!(xdata, scale)
+            push!(ydata, i*Q.time_step)
+        else
+            push!(xdata, 1.0)
+            push!(ydata, Q.time_step)
+        end
+    end
+    inds = sortperm(xdata)
+    xdata = xdata[inds]
+    ydata = ydata[inds]
+    return plot(xdata, ydata, legend=false, xlabel="chi(z)", ylabel="delta(z)", title = title, xguidefontsize = 20, yguidefontsize = 20, xtickfontsize = 14, ytickfontsize = 14, titlefontsize = 20, linewidth = linewidth, palette = :bluesreds)
 end
 
 # end module------------------------------------------------------------------------------------------------

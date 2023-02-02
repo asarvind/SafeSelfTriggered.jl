@@ -9,7 +9,7 @@ B = Matrix(transpose([0 0.085 21.79 0]))
 K = [-0.7214 0.0445 -0.1873 0.2292]
 E = 0.02*B
 tmin = 0.001
-Lc = SelfTriggeredLinearControl(A, B, E, K, tmin)
+Luw = SampledLinearSystem(A, B, E, K, tmin)
 
 # specify safety constraints
 a = 0.5
