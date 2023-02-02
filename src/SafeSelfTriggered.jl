@@ -1,7 +1,7 @@
 module SafeSelfTriggered
 #------------------------------------------------------------------------------------------------------------
 
-export SolverOptions, SelfTriggeredLinearControl,  OfflineQuantities, trigger_time_upper_bound
+export SolverOptions, LinearControlSystem,  OfflineQuantities, trigger_time_upper_bound
 export verify, compare_computation_times
 
 using LinearAlgebra, LazySets # linear algebra and set based calculations
@@ -11,7 +11,7 @@ include("ComplexZonotope.jl") # calculations with complex zonotope
 
 
 @doc raw"""
-    struct SelfTriggeredLinearControl{N<:Real}
+    struct LinearControlSystem{N<:Real}
         A::Matrix{N} # state action matrix
         B::Matrix{N} # control action matrix 
         E::Matrix{N} # disturbance action matrix 
@@ -21,7 +21,7 @@ include("ComplexZonotope.jl") # calculations with complex zonotope
 
 Specification of Self Triggered Linear Control System
 """
-struct SelfTriggeredLinearControl{N<:Real}
+struct LinearControlSystem{N<:Real}
     A::Matrix{N} # state action matrix
     B::Matrix{N} # control action matrix 
     E::Matrix{N} # disturbance action matrix 
@@ -43,28 +43,28 @@ Code macros:\
 Type: SelftriggeredLinearImpusive{N<:Number}[A::Matrix{N}, R::Matrix{N}, E::Matrix{N}, mu:Vector{N}, tmax::N, tmin::N]
 
 Constructor:\
-SelftriggeredLinearImpulsive(A, T, E, tmin)
+LinearImpulsiveSystem(A, T, E, tmin)
 """
-struct SelfTriggeredLinearImpulsive{N<:Real}
+struct LinearImpulsiveSystem{N<:Real}
     A::Matrix{N}
     R::Matrix{N}
     E::Matrix{N}
     tmin::N
 end
 
-function convert(::Type{SelfTriggeredLinearImpulsive{<:Real}}, L::SelfTriggeredLinearControl{<:Real})
+function convert(::Type{LinearImpulsiveSystem{<:Real}}, L::LinearControlSystem{<:Real})
     n, m = size(L.B)
     l = size(L.E, 2)
     Ai = [L.A L.B; zeros(m, n) zeros(m, m)]
     Ri = [Matrix(1.0I, n, n) zeros(n, m); L.K zeros(m, m)]
     Ei = [L.E; zeros(m, l)]
-    return SelfTriggeredLinearImpulsive(Ai, Ri, Ei, L.tmin)
+    return LinearImpulsiveSystem(Ai, Ri, Ei, L.tmin)
 end
 
 @doc raw"""
 
 """
-function bloat_input(L::SelfTriggeredLinearImpulsive{N}, t) where {N<:Real}
+function bloat_input(L::LinearImpulsiveSystem{N}, t) where {N<:Real}
     # get dimensions
     n = size(L.A,1)
     m = size(L.E,2)
@@ -95,7 +95,7 @@ end
 @doc raw"""
 
 """
-function OfflineComputationOptions(L::SelfTriggeredLinearImpulsive{<:Real})
+function OfflineComputationOptions(L::LinearImpulsiveSystem{<:Real})
     upper_bound_expansion_rate = 100.0
     samples_time_gap = L.tmin
     number_samples = 2
@@ -140,7 +140,7 @@ mutable struct SolverOptions
     end
 end
 
-function OfflineComputationOptions(L::SelfTriggeredLinearImpulsive, sopt::SolverOptions)
+function OfflineComputationOptions(L::LinearImpulsiveSystem, sopt::SolverOptions)
     upper_bound_expansion_rate = 100.0
     samples_time_gap = L.tmin
     number_samples = min(sopt.order_invariant_zonotope, 1)
@@ -153,7 +153,7 @@ function OfflineComputationOptions(L::SelfTriggeredLinearImpulsive, sopt::Solver
     return OfflineComputationOptions(upper_bound_expansion_rate, samples_time_gap, number_samples, time_step, number_steps, error_zonotope_order, minimum_expansion_rate_search_gap, maximum_iterations, expansion_index)   
 end
 
-function check_invariant_zero_centered(L::SelfTriggeredLinearImpulsive{<:Real}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
+function check_invariant_zero_centered(L::LinearImpulsiveSystem{<:Real}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
     # compute state action and input action matrces for invariant computation
     Zbloatinp = bloat_input(L, L.tmin) # input added in each iteration
     W = Zbloatinp.generators # input action matrix
@@ -211,7 +211,7 @@ end
 @doc raw"""
 
 """
-function large_invariant_zero_centered(L::SelfTriggeredLinearImpulsive{<:Real}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
+function large_invariant_zero_centered(L::LinearImpulsiveSystem{<:Real}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
     # minimize expansion rate with respect to action with exp(L.A*L.tmin) while guaranteeing invariance with respect to action with action with L.R*exp(L.A*L.tmin)
     iter = 0
     lowrate = 0
@@ -249,10 +249,10 @@ function large_invariant_zero_centered(L::SelfTriggeredLinearImpulsive{<:Real}, 
 end
 
 @doc raw"""
-    error_scale_sequence(L::SelfTriggeredLinearImpulsive, Zinv::ComplexZonotope{N,M}, t::Real, l::Integer; order = 10) where {N<:Real, M<:Number}
+    error_scale_sequence(L::LinearImpulsiveSystem, Zinv::ComplexZonotope{N,M}, t::Real, l::Integer; order = 10) where {N<:Real, M<:Number}
 computes sequence of contractions required for inclusion inside an invariant complex zonotope of a sequence of disturbance input sets involved in computing reachable sets in successive time intervals.
 """
-function error_scale_sequence(L::SelfTriggeredLinearImpulsive{N}, Zinv::ComplexZonotope{N,M}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
+function error_scale_sequence(L::LinearImpulsiveSystem{N}, Zinv::ComplexZonotope{N,M}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
     out = AbstractFloat[] # initialize vector of output sequence
     Zadd = bloat_input(L,options.time_step) # amount of input added in each iteration
     Zinp = (0*L.A)*Zadd # initialize current input set to origin
@@ -273,10 +273,10 @@ function error_scale_sequence(L::SelfTriggeredLinearImpulsive{N}, Zinv::ComplexZ
 end
 
 @doc raw"""
-    state_scale_sequence(L::SelfTriggeredLinearImpulsive, Zinv::ComplexZonotope{N,M}, t::Real, l::Integer) where {N<:Real, M<:Number}
+    state_scale_sequence(L::LinearImpulsiveSystem, Zinv::ComplexZonotope{N,M}, t::Real, l::Integer) where {N<:Real, M<:Number}
 computes sequence of contractions required for inclusion inside an invariant complex zonotope after transformation by a sequence of sets of transformation operators as {exp(A tau) | (i-1)t <= tau <= itau}_{i=1}^{infinity}. 
 """
-function state_scale_sequence(L::SelfTriggeredLinearImpulsive{N}, Zinv::ComplexZonotope{N,M}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
+function state_scale_sequence(L::LinearImpulsiveSystem{N}, Zinv::ComplexZonotope{N,M}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
     out = AbstractFloat[] # initialize vector of output sequence
     # compute operator vertices and error zonotope of approximate convex hull for exp(L.A*tau)x for 0<=tau<=t, x \in Zinv
     M1 = exp(L.A*options.time_step) # approximate operator 
@@ -321,7 +321,7 @@ struct OfflineQuantities
     error_scales::Vector{<:Real}
 end
 
-function OfflineQuantities(L::SelfTriggeredLinearImpulsive{N}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
+function OfflineQuantities(L::LinearImpulsiveSystem{N}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}; options::OfflineComputationOptions = OfflineComputationOptions(L), optimizer = Mosek.Optimizer) where {N<:Real, M<:Number}
     # compute large invariant
     Zinv = large_invariant_zero_centered(L, Zinit, T; options)
     # compute state action contraction sequence
@@ -335,12 +335,12 @@ function OfflineQuantities(L::SelfTriggeredLinearImpulsive{N}, Zinit::ComplexZon
 end
 
 @doc raw"""
-    OfflineQuantities(L::SelfTriggeredLinearControl{N}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}, solver_options::SolverOptions=SolverOptions()) where {N<:Real, M<:Number} -> ::OfflineQuantitites
+    OfflineQuantities(L::LinearControlSystem{N}, Zinit::ComplexZonotope{N,M}, T::Matrix{N}, solver_options::SolverOptions=SolverOptions()) where {N<:Real, M<:Number} -> ::OfflineQuantitites
 
 offline pre-computation of quantities required for computing latter the online triggering time upper bound.
 """
-function OfflineQuantities(Lc::SelfTriggeredLinearControl{N}, T::Matrix{N}, init_bound::Vector{N}=zeros(size(Lc.A,1)); solver_options::SolverOptions=SolverOptions()) where {N<:Real}
-    L = convert(SelfTriggeredLinearImpulsive, Lc)
+function OfflineQuantities(Lc::LinearControlSystem{N}, T::Matrix{N}, init_bound::Vector{N}=zeros(size(Lc.A,1)); solver_options::SolverOptions=SolverOptions()) where {N<:Real}
+    L = convert(LinearImpulsiveSystem, Lc)
     Gentop = diagm(init_bound)
     Genbot = Lc.K*Gentop
     generators = vcat(Gentop, Genbot)
@@ -351,10 +351,10 @@ end
 
 
 @doc raw"""
-    trigger_time_upper_bound(L::SelfTriggeredLinearImpulsive{<:Real}, x::Vector{<:Real}, inctesstateaction::Matrix{<:Number}, t::Real, statescales::Vector{<:Real}, errorscales::Vector{<:Real})
+    trigger_time_upper_bound(L::LinearImpulsiveSystem{<:Real}, x::Vector{<:Real}, inctesstateaction::Matrix{<:Number}, t::Real, statescales::Vector{<:Real}, errorscales::Vector{<:Real})
 computes the upper bound on the time for next impulse
 """
-function trigger_time_upper_bound(L::SelfTriggeredLinearImpulsive{<:Real}, x::Vector{<:Real}, Q::OfflineQuantities)
+function trigger_time_upper_bound(L::LinearImpulsiveSystem{<:Real}, x::Vector{<:Real}, Q::OfflineQuantities)
     # contraction required for containing x
     cont = norm(Q.scaling_matrix*x, Inf)
     # upper bound on trigger time using line search
@@ -400,8 +400,8 @@ end
 @doc raw"""
 
 """
-function compare_computation_times(number_points::Integer, Lc::SelfTriggeredLinearControl{<:Real}, T::Matrix{<:Real}, Q::OfflineQuantities; sampling_region_scale::Real = 1.0, seed = 1)
-    L = convert(SelfTriggeredLinearImpulsive, Lc)
+function compare_computation_times(number_points::Integer, Lc::LinearControlSystem{<:Real}, T::Matrix{<:Real}, Q::OfflineQuantities; sampling_region_scale::Real = 1.0, seed = 1)
+    L = convert(LinearImpulsiveSystem, Lc)
     stateaction = exp(L.A*L.tmin) # state action matrix used in discrete time reachability
     Zinp = bloat_input(L, L.tmin) # input zonotope in discrete time reachability
     inputgens = Zinp.generators # generators of above input zonotope
