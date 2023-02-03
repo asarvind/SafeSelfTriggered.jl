@@ -1,8 +1,9 @@
 module SafeSelfTriggered
 #------------------------------------------------------------------------------------------------------------
 
-export SolverOptions, SampledLinearSystem,  OfflineQuantities, trigger_time_upper_bound
-export generate_schedule, generate_verifier, compare_computation_times, plot_scheduling_function
+export SolverOptions, SampledLinearSystem
+export Scheduler, generate_verifier, compare_computation_times, plot_scheduling_function
+export plot_zonotopes!
 
 using LinearAlgebra, LazySets # linear algebra and set based calculations
 using JuMP, SCS, MathOptInterface, Mosek, MosekTools # optimization packages
@@ -374,9 +375,24 @@ function trigger_time_upper_bound(L::LinearImpulsiveSystem{<:Real}, x::Vector{<:
     return lowind*Q.time_step + L.tmin
 end
 
-function generate_schedule(L::SampledLinearSystem, Q::OfflineQuantities)
+struct Scheduler
+    compute::Function 
+    invariant::ComplexZonotope{<:Real, <:Number}
+    scaling_matrix::Matrix{<:Number}
+    time_step::Real
+    state_scales::Vector{<:Real}
+    error_scales::Vector{<:Real}
+end
+
+function Scheduler(L::SampledLinearSystem, T::Matrix{<:Real}; solver_options::SolverOptions=SolverOptions())
+    Q = OfflineQuantities(L, T; solver_options=solver_options)
     Limp = convert(LinearImpulsiveSystem, L)
     scheduling_fun(x::Vector{<:Real}, u::Vector{<:Real}) = trigger_time_upper_bound(Limp, vcat(x,u), Q)
+    return Scheduler(scheduling_fun, Q.invariant, Q.scaling_matrix, Q.time_step, Q.state_scales, Q.error_scales)
+end
+
+function (sfun::Scheduler)(x::Vector{<:Real}, u::Vector{<:Real})
+    return sfun.compute(x, u)
 end
 
 @doc raw"""
@@ -415,15 +431,11 @@ end
 @doc raw"""
 
 """
-function compare_computation_times(number_points::Integer, Lc::SampledLinearSystem{<:Real}, T::Matrix{<:Real}, Q::OfflineQuantities; sampling_region_scale::Real = 1.0, seed = 1)
-    L = convert(LinearImpulsiveSystem, Lc)
-    stateaction = exp(L.A*L.tmin) # state action matrix used in discrete time reachability
-    Zinp = bloat_input(L, L.tmin) # input zonotope in discrete time reachability
-    inputgens = Zinp.generators # generators of above input zonotope
+function compare_computation_times(number_points::Integer, Lc::SampledLinearSystem{<:Real}, T::Matrix{<:Real}, sfun::Scheduler; sampling_region_scale::Real = 1.0, seed = 1)
     # generate random points inside Zinv
     randpairs = []
     for i = 1:number_points
-        rp =  sampling_region_scale*rand()*real.(Q.invariant.generators*(rand(MersenneTwister(seed), Complex{Float64}, size(Q.invariant.scale_vector)) .*Q.invariant.scale_vector))
+        rp =  sampling_region_scale*rand()*real.(sfun.invariant.generators*(rand(MersenneTwister(seed), Complex{Float64}, size(sfun.invariant.scale_vector)) .*sfun.invariant.scale_vector))
         rs = rp[1:size(Lc.A,1)]
         if typeof(rs)<:Real
             rs = [rs]
@@ -436,17 +448,16 @@ function compare_computation_times(number_points::Integer, Lc::SampledLinearSyst
     end
     # compute schedules and number of multiples of minimum impulse time with precomputed reachability scales 
     schedules = []
-    # create scheduling and verifying function 
-    sch_fun = generate_schedule(Lc, Q)
-    ver_fun = generate_verifier(Lc, T, Q.time_step)
+    # create verification function 
+    ver_fun = generate_verifier(Lc, T, sfun.time_step)
     for (x,u) in randpairs
-        t = sch_fun(x, u)
+        t = sfun(x, u)
         push!(schedules, t)
     end
     # compute time required for computing schedules for all points by two approaches
     comp_time1 = @elapsed begin
         for (x,u) in randpairs
-            sch_fun(x, u)
+            sfun(x, u)
         end
     end
     comp_time2 = @elapsed begin
@@ -461,7 +472,7 @@ function compare_computation_times(number_points::Integer, Lc::SampledLinearSyst
     return (schedules, comp_time1, comp_time2)
 end
 
-function plot_scheduling_function(Q::OfflineQuantities; title::String = "", linewidth::Real = 10.0)
+function plot_scheduling_function(Q::Scheduler; title::String = "", linewidth::Real = 10.0)
     n = length(Q.error_scales)
     xdata = AbstractFloat[]
     ydata = AbstractFloat[]
@@ -479,6 +490,25 @@ function plot_scheduling_function(Q::OfflineQuantities; title::String = "", line
     xdata = xdata[inds]
     ydata = ydata[inds]
     return plot(xdata, ydata, legend=false, xlabel="chi(z)", ylabel="delta(z)", title = title, xguidefontsize = 20, yguidefontsize = 20, xtickfontsize = 14, ytickfontsize = 14, titlefontsize = 20, linewidth = linewidth, palette = :bluesreds)
+end
+
+
+function plot_zonotopes!(Z::Vector{ComplexZonotope{N,M}}, dim1::Integer, dim2::Integer; num_points = 10000, p::Plots.Plot{Plots.GRBackend} = plot(), labels::Vector{<:String} = String[], legendfontsize::Integer = 30, setlegend::Bool = false, xlabel = "", ylabel = "") where {N<:Real, M<:Number}
+    iter = 1
+    for ztope in Z
+        # sample random directions in the hyperplane
+        n = length(ztope.center)
+        c = zeros(2,n)
+        c[1,dim1] = 1.0
+        c[2,dim2] = 1.0
+        znew = c*ztope
+        dirs = rand(num_points, 2) .- 0.5
+        offsets = dirs*znew.center + abs.(dirs*znew.generators)*znew.scale_vector
+        cons = constraints_list(dirs, offsets)
+        H = HPolytope(cons)
+        plot!(p, H, color = "blue", label = labels[iter], legendfontsize = legendfontsize, legend = setlegend, xguidefontsize = 20, yguidefontsize = 20, xtickfontsize = 14, ytickfontsize = 14, xlabel = xlabel, ylabel = ylabel)
+        iter += 1
+    end
 end
 
 # end module------------------------------------------------------------------------------------------------
