@@ -440,7 +440,7 @@ function compare_computation_times(number_points::Integer, Lc::SampledLinearSyst
         if typeof(rs)<:Real
             rs = [rs]
         end
-        rc = rp[size(Lc.A,1)+1, end]
+        rc = rp[size(Lc.A,1)+1:end] 
         if typeof(rc)<:Real 
             rc = [rc]
         end
