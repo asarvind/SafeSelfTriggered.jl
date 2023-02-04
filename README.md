@@ -7,7 +7,7 @@ This package implements a self triggered controller synthesis algorithm for safe
 
 The documentation of the tutorial is available as a Jupyter notebook `tutorial.ipynb` in the [following link](https://github.com/asarvind/SafeSelfTriggered.jl/tree/main/docs).  Clone the repository into the host machine.  Then follow the steps in the tutorial to understand the methods in the package.
 
-### Intallation 
+### Installation 
 Clone the repository anywhere on the host machine. Then from any working folder, do the following to access the methods of the package from that working folder.
 ```julia   
 using Pkg;
