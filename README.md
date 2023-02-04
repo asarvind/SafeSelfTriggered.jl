@@ -16,4 +16,4 @@ Pkg.instantiate()
 Pkg.resolve()
 ```
 
-*Note: This package is not yet registered as in the official Julia registry.  So, you can not install it through the Julia registry.*
+*Note: This package is not yet registered in the official Julia registry.  So, you can not install it through the Julia registry.*
