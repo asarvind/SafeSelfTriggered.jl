@@ -7,11 +7,16 @@ This package implements a self triggered controller synthesis algorithm for safe
 
 The documentation of the tutorial is available as a Jupyter notebook `tutorial.ipynb` in the [following link](https://github.com/asarvind/SafeSelfTriggered.jl/tree/main/docs).  Clone the repository into the host machine.  Then execute the cells in the tutorial notebook `docs/tutorial.ipynb` to understand the methods in the package.
 
-### Installation 
+## Installation 
+
+### Mosek License
+You will need a Mosek license for executing the programs in this repo.  Download a Mosek license and include it in a folder `mosek` in the home directory, like `$Home/mosek/mosek.lic`.  Detailed instructions are provided in this [webpage](https://docs.mosek.com/latest/install/installation.html).  
+
+### 
 Clone the repository anywhere on the host machine. Then from any working folder, do the following to access the methods of the package from that working folder.
 ```julia   
 using Pkg;
-Pkg.activate("full_path_to_the_repository_folder"); 
+Pkg.activate("full_path_to_the_repository_folder"); # Eg. Pkg.activate("/Users/arvind/main/programs/devpackages/SafeSelfTriggered.jl")
 Pkg.instantiate()
 Pkg.resolve()
 ```
