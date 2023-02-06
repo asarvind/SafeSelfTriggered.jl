@@ -1,6 +1,6 @@
 # SafeSelfTriggered
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://github.com/asarvind/SafeSelfTriggered.jl/blob/main/docs/tutorial.ipynb)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://htmlpreview.github.io/?https://github.com/asarvind/SafeSelfTriggered.jl/blob/main/docs/tutorial.html)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://github.com/asarvind/SafeSelfTriggered.jl/blob/main/docs/devtutorial.ipynb)
 
 This package implements a self triggered controller synthesis algorithm for safe execution from the paper titled **Safe Self-Triggered Control Based on Precomputed Reachability Sequences**.  This paper will appear in the *26th ACM International Conference on Hybrid Systems: Computation and Control*.  A preliminary version of the paper is available as the file `paper.pdf` in the [following link](https://github.com/asarvind/SafeSelfTriggered.jl/tree/main/docs).
