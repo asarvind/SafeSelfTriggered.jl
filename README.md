@@ -23,7 +23,8 @@ The documentation of the tutorial is available as a Jupyter notebook `tutorial.i
 Clone the repository anywhere on the host machine. Then from any working folder, do the following to access the methods of the package from that working folder.
 ```julia   
 using Pkg;
-Pkg.activate("full_path_to_the_repository_folder"); # Eg. Pkg.activate("/Users/arvind/main/programs/devpackages/SafeSelfTriggered.jl")
+Pkg.activate("full_path_to_the_repository_folder"); 
+# Eg. Pkg.activate("/Users/arvind/main/programs/devpackages/SafeSelfTriggered.jl")
 Pkg.instantiate()
 Pkg.resolve()
 ```
