@@ -13,11 +13,11 @@ The documentation of the tutorial is available as a Jupyter notebook `tutorial.i
 1.  **Julia**:  Install latest version of Julia on Mac or Ubuntu
     - Visit [https://julialang.org/downloads/](https://julialang.org/downloads/)
 
-2.  **IJulia and Jupyter**:  The Julia package IJulia and Jupyter notebook have to be installed to run this notebook.  
+2.  **IJulia and Jupyter**:  The Julia package IJulia and Jupyter notebook have to be installed to open the notebook `docs/tutorial.ipynb`.  
     - Visit [https://julialang.github.io/IJulia.jl/stable/manual/installation/](https://julialang.github.io/IJulia.jl/stable/manual/installation/)
 
 3.  **Mosek License**:  You will need a Mosek license for executing the programs in this repo.  Download a Mosek license and include it in a folder `mosek` in the home directory, like `$Home/mosek/mosek.lic`.   
-    - Visit [webpage](https://docs.mosek.com/latest/install/installation.html) for detailed instructions.  
+    - Visit [https://docs.mosek.com/latest/install/installation.html](https://docs.mosek.com/latest/install/installation.html) for detailed instructions.  
 
 ### Precompiling
 Clone the repository anywhere on the host machine. Then from any working folder, do the following to access the methods of the package from that working folder.
